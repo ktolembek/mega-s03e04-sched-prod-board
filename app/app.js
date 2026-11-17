@@ -144,9 +144,10 @@ function pullNewIncidents() {
 
 newBar.addEventListener('click', pullNewIncidents);
 
-list.addEventListener('mouseover', (event) => {
-  const btn = event.target.closest('[data-testid="ack"]');
-  if (btn) aimAckId = btn.dataset.ackId ?? aimAckId;
+list.addEventListener('mousemove', (event) => {
+  const el = document.elementFromPoint(event.clientX, event.clientY);
+  const btn = el?.closest('[data-testid="ack"]');
+  if (btn?.dataset.ackId) aimAckId = btn.dataset.ackId;
 });
 
 list.addEventListener(
