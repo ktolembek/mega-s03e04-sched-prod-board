@@ -37,7 +37,7 @@ let ready = false;
 let ackInFlight = false;
 let pendingRender = false;
 let pointerTargetId = null;
-let hoverAckId = null;
+let aimAckId = null;
 
 function mergeIncidents(incidents) {
   for (const i of incidents) {
@@ -144,22 +144,24 @@ function pullNewIncidents() {
 
 newBar.addEventListener('click', pullNewIncidents);
 
-list.addEventListener('mousemove', (event) => {
+list.addEventListener('mouseover', (event) => {
   const btn = event.target.closest('[data-testid="ack"]');
-  hoverAckId = btn?.dataset.ackId ?? hoverAckId;
+  if (btn) aimAckId = btn.dataset.ackId ?? aimAckId;
 });
 
 list.addEventListener(
   'pointerdown',
   (event) => {
-    const btn = event.target.closest('[data-testid="ack"]');
-    if (!btn && !hoverAckId) return;
     if (ackInFlight) return;
-    pointerTargetId = hoverAckId ?? btn?.dataset.ackId ?? null;
+    const btn = event.target.closest('[data-testid="ack"]');
+    pointerTargetId = aimAckId ?? btn?.dataset.ackId ?? null;
     if (!pointerTargetId) return;
-    btn.disabled = true;
+    const targetBtn = list.querySelector(
+      `[data-testid="ack"][data-ack-id="${pointerTargetId}"]`,
+    );
+    targetBtn?.setAttribute('disabled', 'true');
     ackInFlight = true;
-    void runAck(pointerTargetId, btn);
+    void runAck(pointerTargetId, targetBtn);
   },
   true,
 );
