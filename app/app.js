@@ -144,12 +144,18 @@ function pullNewIncidents() {
 
 newBar.addEventListener('click', pullNewIncidents);
 
+list.addEventListener('mousemove', (event) => {
+  const btn = event.target.closest('[data-testid="ack"]');
+  hoverAckId = btn?.dataset.ackId ?? hoverAckId;
+});
+
 list.addEventListener(
   'pointerdown',
   (event) => {
     const btn = event.target.closest('[data-testid="ack"]');
-    if (!btn || ackInFlight) return;
-    pointerTargetId = btn.dataset.ackId ?? null;
+    if (!btn && !hoverAckId) return;
+    if (ackInFlight) return;
+    pointerTargetId = hoverAckId ?? btn?.dataset.ackId ?? null;
     if (!pointerTargetId) return;
     btn.disabled = true;
     ackInFlight = true;
