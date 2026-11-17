@@ -163,7 +163,8 @@ list.addEventListener(
   (event) => {
     if (ackInFlight) return;
     const btn = event.target.closest('[data-testid="ack"]');
-    pointerTargetId = aimAckId ?? btn?.dataset.ackId ?? null;
+    pointerTargetId =
+      aimAckId ?? rowIdAt(event.clientY) ?? btn?.dataset.ackId ?? null;
     if (!pointerTargetId) return;
     const targetBtn = list.querySelector(
       `[data-testid="ack"][data-ack-id="${pointerTargetId}"]`,

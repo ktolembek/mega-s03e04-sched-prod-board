@@ -15,9 +15,11 @@
     </header>
     <main data-testid="board">
       <div data-testid="loader" class="loader" aria-live="polite">Loading incidents…</div>
-      <button type="button" data-testid="new-bar" class="new-bar hidden" aria-live="polite">
-        <span data-testid="new-count">0</span> new
-      </button>
+      <div class="new-bar-slot">
+        <button type="button" data-testid="new-bar" class="new-bar hidden" aria-live="polite">
+          <span data-testid="new-count">0</span> new
+        </button>
+      </div>
       <p data-testid="empty" class="empty hidden">No incidents tonight.</p>
       <ul data-testid="incident-list" class="list hidden"></ul>
     </main>
