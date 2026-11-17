@@ -129,6 +129,14 @@ function render() {
   updateNewBar();
 }
 
+function rowIdAt(clientY) {
+  for (const row of list.querySelectorAll('[data-testid="incident-row"]')) {
+    const rect = row.getBoundingClientRect();
+    if (clientY >= rect.top && clientY <= rect.bottom) return row.dataset.id;
+  }
+  return null;
+}
+
 function pullNewIncidents() {
   const pending = pendingIncidents();
   const newestFirst = [...pending].sort(
