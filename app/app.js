@@ -75,20 +75,39 @@ function render() {
     .join('');
 }
 
+let pointerTargetId = null;
+
+list.addEventListener(
+  'pointerdown',
+  (event) => {
+    const btn = event.target.closest('[data-testid="ack"]');
+    if (!btn) return;
+    const row = btn.closest('[data-testid="incident-row"]');
+    pointerTargetId = row?.dataset.id ?? null;
+    board.dataset.ackPointer = pointerTargetId ?? '';
+  },
+  true,
+);
+
 async function onAckClick(event) {
   const btn = event.target.closest('[data-testid="ack"]');
   if (!btn) return;
   const row = btn.closest('[data-testid="incident-row"]');
   if (!row) return;
   const id = row.dataset.id;
+  const expected = pointerTargetId ?? id;
   btn.disabled = true;
   try {
     const reply = await ack(id);
     ackedIds.add(reply.id);
+    console.info('ack-intent', expected, 'ack-result', reply.id);
     render();
   } catch (err) {
     console.error(err);
     btn.disabled = false;
+  } finally {
+    pointerTargetId = null;
+    delete board.dataset.ackPointer;
   }
 }
 
