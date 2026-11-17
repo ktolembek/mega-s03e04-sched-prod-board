@@ -37,6 +37,7 @@ let ready = false;
 let ackInFlight = false;
 let pendingRender = false;
 let pointerTargetId = null;
+let hoverAckId = null;
 
 function mergeIncidents(incidents) {
   for (const i of incidents) {
@@ -147,38 +148,30 @@ list.addEventListener(
   'pointerdown',
   (event) => {
     const btn = event.target.closest('[data-testid="ack"]');
-    if (!btn) return;
+    if (!btn || ackInFlight) return;
     pointerTargetId = btn.dataset.ackId ?? null;
+    if (!pointerTargetId) return;
+    btn.disabled = true;
+    ackInFlight = true;
+    void runAck(pointerTargetId, btn);
   },
   true,
 );
 
-async function onAckClick(event) {
-  event.preventDefault();
-  const id = pointerTargetId;
-  if (!id || ackInFlight) return;
-
-  const btn = list.querySelector(`[data-testid="ack"][data-ack-id="${id}"]`);
-  if (btn) btn.disabled = true;
-
-  ackInFlight = true;
+async function runAck(id, btn) {
   try {
     const reply = await ack(id);
     ackedIds.add(reply.id);
-    pendingRender = true;
     renderList();
     updateNewBar();
   } catch (err) {
     console.error(err);
-    if (btn) btn.disabled = false;
+    if (btn?.isConnected) btn.disabled = false;
   } finally {
     ackInFlight = false;
     pointerTargetId = null;
-    pendingRender = false;
   }
 }
-
-list.addEventListener('click', onAckClick);
 
 async function refresh() {
   board.dataset.refreshing = 'true';
@@ -195,9 +188,7 @@ async function refresh() {
     }
 
     updateNewBar();
-    if (!ackInFlight) {
-      renderList();
-    }
+    if (!ackInFlight) renderList();
   } catch (err) {
     console.error('refresh failed', err);
     if (!ready) loader.textContent = 'Could not load incidents. Retrying…';
