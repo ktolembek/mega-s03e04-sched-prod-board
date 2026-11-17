@@ -31,11 +31,11 @@ function formatOpenedAt(iso) {
 }
 
 const incidentsById = new Map();
-const displayedIds = new Set();
+const displayOrder = [];
 const ackedIds = new Set();
 let ready = false;
 let ackInFlight = false;
-let renderQueued = false;
+let pendingRender = false;
 let pointerTargetId = null;
 
 function mergeIncidents(incidents) {
@@ -44,14 +44,15 @@ function mergeIncidents(incidents) {
   }
 }
 
-function orderedIncidents() {
+function orderedAll() {
   return [...incidentsById.values()].sort(
     (a, b) => new Date(b.openedAt) - new Date(a.openedAt),
   );
 }
 
 function pendingIncidents() {
-  return orderedIncidents().filter((i) => !displayedIds.has(i.id));
+  const shown = new Set(displayOrder);
+  return orderedAll().filter((i) => !shown.has(i.id));
 }
 
 function updateNewBar() {
@@ -64,11 +65,29 @@ function updateNewBar() {
   }
 }
 
+function rowBody(i) {
+  const isAcked = ackedIds.has(i.id);
+  const ackBtn = isAcked
+    ? '<span data-testid="acked" class="acked">Acked</span>'
+    : `<button type="button" data-testid="ack" class="ack" data-ack-id="${i.id}">Ack</button>`;
+  return `<span class="id">${i.id}</span>
+        <span class="sev">${i.severity}</span>
+        <span class="what">${i.service} · ${i.region} · ${i.summary}</span>
+        <time datetime="${i.openedAt}">${formatOpenedAt(i.openedAt)}</time>
+        ${ackBtn}`;
+}
+
+function updateRowElement(li, incident) {
+  li.dataset.id = incident.id;
+  li.className = `row ${incident.severity}`;
+  li.innerHTML = rowBody(incident);
+}
+
 function renderList() {
-  const incidents = orderedIncidents().filter((i) => displayedIds.has(i.id));
+  if (!ready) return;
 
   loader.classList.add('hidden');
-  if (incidents.length === 0 && !ready) return;
+  const incidents = displayOrder.map((id) => incidentsById.get(id)).filter(Boolean);
 
   if (incidents.length === 0) {
     empty.classList.remove('hidden');
@@ -80,37 +99,27 @@ function renderList() {
   empty.classList.add('hidden');
   list.classList.remove('hidden');
 
-  const keep = new Set(incidents.map((i) => i.id));
-  for (const child of [...list.children]) {
-    if (!keep.has(child.dataset.id)) child.remove();
-  }
-
   const byId = new Map([...list.children].map((el) => [el.dataset.id, el]));
 
-  incidents.forEach((incident, index) => {
-    let li = byId.get(incident.id);
-    const isAcked = ackedIds.has(incident.id);
-    const ackBtn = isAcked
-      ? '<span data-testid="acked" class="acked">Acked</span>'
-      : `<button type="button" data-testid="ack" class="ack" data-ack-id="${incident.id}">Ack</button>`;
+  displayOrder.forEach((id, index) => {
+    const incident = incidentsById.get(id);
+    if (!incident) return;
 
+    let li = byId.get(id);
     if (!li) {
       li = document.createElement('li');
       li.dataset.testid = 'incident-row';
-      li.dataset.id = incident.id;
-      li.className = `row ${incident.severity}`;
-    } else {
-      li.className = `row ${incident.severity}`;
+      list.appendChild(li);
     }
-    li.innerHTML = `<span class="id">${incident.id}</span>
-        <span class="sev">${incident.severity}</span>
-        <span class="what">${incident.service} · ${incident.region} · ${incident.summary}</span>
-        <time datetime="${incident.openedAt}">${formatOpenedAt(incident.openedAt)}</time>
-        ${ackBtn}`;
+    updateRowElement(li, incident);
 
     const ref = list.children[index];
     if (ref !== li) list.insertBefore(li, ref ?? null);
   });
+
+  for (const child of [...list.children]) {
+    if (!displayOrder.includes(child.dataset.id)) child.remove();
+  }
 }
 
 function render() {
@@ -120,8 +129,14 @@ function render() {
 }
 
 function pullNewIncidents() {
-  for (const incident of pendingIncidents()) {
-    displayedIds.add(incident.id);
+  const pending = pendingIncidents();
+  const newestFirst = [...pending].sort(
+    (a, b) => new Date(b.openedAt) - new Date(a.openedAt),
+  );
+  for (const incident of newestFirst) {
+    if (!displayOrder.includes(incident.id)) {
+      displayOrder.unshift(incident.id);
+    }
   }
   render();
 }
@@ -133,33 +148,33 @@ list.addEventListener(
   (event) => {
     const btn = event.target.closest('[data-testid="ack"]');
     if (!btn) return;
-    pointerTargetId = btn.dataset.ackId ?? btn.closest('[data-testid="incident-row"]')?.dataset.id ?? null;
+    pointerTargetId = btn.dataset.ackId ?? null;
   },
   true,
 );
 
 async function onAckClick(event) {
-  const btn = event.target.closest('[data-testid="ack"]');
-  if (!btn || btn.disabled) return;
-  const id = pointerTargetId ?? btn.dataset.ackId;
-  if (!id) return;
+  event.preventDefault();
+  const id = pointerTargetId;
+  if (!id || ackInFlight) return;
 
-  btn.disabled = true;
+  const btn = list.querySelector(`[data-testid="ack"][data-ack-id="${id}"]`);
+  if (btn) btn.disabled = true;
+
   ackInFlight = true;
   try {
     const reply = await ack(id);
     ackedIds.add(reply.id);
-    render();
+    pendingRender = true;
+    renderList();
+    updateNewBar();
   } catch (err) {
     console.error(err);
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   } finally {
     ackInFlight = false;
     pointerTargetId = null;
-    if (renderQueued) {
-      renderQueued = false;
-      updateNewBar();
-    }
+    pendingRender = false;
   }
 }
 
@@ -172,7 +187,8 @@ async function refresh() {
     mergeIncidents(page.incidents);
 
     if (!ready) {
-      for (const i of page.incidents) displayedIds.add(i.id);
+      displayOrder.length = 0;
+      for (const i of orderedAll()) displayOrder.push(i.id);
       ready = true;
       render();
       return;
@@ -181,8 +197,6 @@ async function refresh() {
     updateNewBar();
     if (!ackInFlight) {
       renderList();
-    } else {
-      renderQueued = true;
     }
   } catch (err) {
     console.error('refresh failed', err);
